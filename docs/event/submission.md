@@ -3,12 +3,13 @@
 Deadline: 2026-11-14 23:59 UTC (15 Nov 05:29 IST). One submission per repo. One attempt.
 
 ## Before submitting
-- [ ] Repo public, LICENSE present, README has "do X, see Y" steps for the simulator path and the hardware path.
+- [x] Repo public, LICENSE present, README has "do X, see Y" steps for the simulator path and the hardware path.
 - [ ] Demo video recorded (backup recorded early).
 - [ ] X post published by the human: says built at NEAR HACKATHON, tags `@NEARProtocol` and `#NEARHackathon`
       (optional `@NearLegion` `@NearBuilders`), video attached. Copy the post URL.
 - [ ] Mainnet payout account exists (e.g. `yourname.near`).
-- [ ] `docs/claims-ledger.md` is complete and honest.
+- [x] `docs/claims-ledger.md` is complete and honest.
+- [x] Cold clone of the public repo on a clean machine: install, offline story, 21 bridge tests all pass (2026-11-14 12:30 UTC).
 
 ## Payload (exact fields; `website` is a spam trap, never include it)
 ```json
@@ -40,14 +41,11 @@ Generate requestId with `uuidgen | tr A-Z a-z`. Print the payload, get an explic
 
 Mistakes after a 201: https://nearhackathon.com/request-changes (never resubmit).
 
-## Idea text draft (edit before use; 2026-11-14 positioning)
-Problem: agents now pay for API calls, data and compute, and an agent that holds a key file can be prompt-injected
-into spending all of it. Fuse gives an AI agent a budget instead of keys. The agent's NEAR account holds exactly one
-key, generated on an ESP32-S3 and never exported; the protocol scopes it to one contract and three methods. The chip
-decodes every transaction's raw bytes, enforces allowlists and caps, needs a button press above a threshold and a
-second chip above a quorum, and signs refusal receipts that the wallet contract verifies, stores and forwards to a
-shared registry other agents consult (allow / warn / block). The policy is owner-signed and enforced three times:
-protocol, silicon, contract. Unplug the chip and the agent is revoked. Claude Code uses it through MCP; a seller
-serves pay-per-call APIs after reading the payment from the chain; through Chain Signatures the same chip approves
-payments on other chains. NEAR provides the key model, the onchain policy and evidence, and the cross-chain signing.
-Everything in the README is labelled real chip, simulator or unverified.
+## Idea text (final, 1953 chars, 2026-11-14)
+Problem: agents now pay for API calls, data and compute. Today an agent either cannot pay, or it holds a wallet file that one poisoned web page can drain. Software spending guards check the payment in the agent's process or in a contract, but the key still lives on the machine the agent runs on, so a compromised host can sign around the check or take the key.
+
+Fuse gives an agent a budget, not keys. The agent's NEAR account holds exactly one key, generated on an ESP32-S3 and never exported; a function-call access key scopes it to one wallet contract and three methods at the protocol level. The chip decodes every transaction's raw bytes itself, never trusting the laptop that relays them, enforces receiver and token allowlists and caps, asks for a button press above a threshold and a second chip above a quorum, and signs a refusal receipt for every payment it stops. The wallet contract verifies and stores the receipt and forwards it to a shared registry other agents consult before paying anyone. The policy is owner-signed (NEP-413) and enforced three times: protocol, silicon, contract. Unplug the chip and the agent is revoked.
+
+Claude Code uses it through one MCP tool: fuse_fetch reads an HTTP 402 price, checks the counterparty, has the chip sign, and redeems the API call with the chain receipt as proof. No vendor accounts or API keys. A red-team page lets anyone try to talk the agent into paying an attacker. Through Chain Signatures the same chip approves payments on Ethereum and Bitcoin.
+
+Proven on testnet with the real chip: payment CxpuNBs7, button-gated payment AnP5Q2Zz, refusal receipts #17-19 stored onchain and forwarded to the registry (AEDpx3pH), MCP purchase 2HFVg7zi, quorum payment parked then approved by a second signer. 16/16 attacks stopped, 0/50 legitimate payments refused, 150 tests. Every README claim is labelled real chip, simulator or unverified; one offline command reproduces the demo without hardware.
