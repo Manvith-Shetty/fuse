@@ -1,0 +1,7 @@
+{
+  "name": "@fuse/attacks",
+  "private": true,
+  "type": "module",
+  "description": "Fuse attack suite. Run from the repo root: npm run attacks. Reuses bridge/node_modules via a symlink and runs with cwd=bridge so bridge/.env is loaded.",
+  "scripts": { "run": "cd ../bridge && npx tsx ../attacks/src/run.ts" }
+}
