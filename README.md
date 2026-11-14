@@ -197,6 +197,13 @@ mainnet-only, so the bridge only produces dry quotes. The attack report is self-
 TEE-decision path is wired but has not run against NEAR AI Cloud. The shared registry is advisory and can be gamed
 without trusted reporters.
 
+**How this was built.** Fuse was designed and built by one person during the hackathon, with AI coding assistants used
+for drafting code, tests, documentation and the demo video clips. Every design decision, every policy rule the chip
+enforces, and every claim in `docs/claims-ledger.md` was reviewed and run by hand on the ESP32-S3 and on testnet. The
+"What broke" section above is the record of where that review caught problems. Libraries are the usual ones for each
+layer (near-sdk, near-api-js, noble, Fastify, PlatformIO, React) and are listed in each package manifest; nothing
+pre-dates the hackathon window.
+
 ## Where this stands next to other work
 
 Most agent wallets this month, including good ones in this hackathon such as Veto, are software firewalls: a policy
@@ -213,6 +220,15 @@ you hold plus the contract, with no hosted party to trust and revocation by cabl
 approve each transaction on a device; the Fuse chip enforces the policy itself, so the human is only needed above a
 threshold and the agent runs unattended within bounds. LeekWallet is a do-it-yourself hardware wallet for people; Fuse
 is a budget key for agents, with no screen, no blind-signing override, and a policy instead of a prompt.
+
+Three entries in this hackathon sit closest. Keyring gives the agent a scoped key and a policy, and holds anything
+outside the policy until a hardware wallet approves it over NFC: the device is a second human signature, as with
+Ledger. In Fuse the device is the only signer, decodes every transaction itself, and the human is asked only above the
+threshold. Symbolon has the chain verify an Intel TDX attestation of the model that approved an invoice, which is the
+TEE leg Fuse has wired but has only run in simulation; Symbolon does not move the key off the host or sign refusals.
+Black box hash-chains an agent's decisions and anchors them onchain so the log cannot be rewritten; Fuse's refusal
+receipts do the same for one kind of decision, with the difference that the chip also enforces it, so the record is of
+what was stopped, not only of what was decided.
 
 Questions a careful reader asks (why not an allowance alone, why not a multisig, what if the chip is stolen) are
 answered in [docs/FAQ.md](docs/FAQ.md). Scope, known gaps and how to report a hole: [SECURITY.md](SECURITY.md).
