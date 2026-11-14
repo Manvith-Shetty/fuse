@@ -31,6 +31,12 @@ in this file says whether it ran on the real ESP32-S3, on the labelled software 
 
 All of this ran on the real chip on 14 November 2026. The transactions are linked further down.
 
+| ![The chip at rest: dim green, waiting for the agent](docs/photos/chip-idle.jpg) | ![The chip refusing a payment to attacker.testnet: red, nothing signed, receipt on its way onchain](docs/photos/chip-refused.jpg) | ![Amber: a payment above the threshold, waiting for a thumb on BOOT](docs/photos/chip-button.jpg) |
+|---|---|---|
+| At rest: dim green, the agent may spend within policy. | Refused: red, nothing signed, a receipt goes onchain instead. | Above the threshold: amber until a thumb lands on BOOT. |
+
+These are frames from the demo recording, not renders. The board is a 7Semi ESP32-S3 DevKitC-1 on a bedsheet.
+
 ## How the pieces fit
 
 ![How Fuse fits together: the agent proposes, the chip decides, the chain remembers](docs/architecture.png)
