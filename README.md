@@ -14,6 +14,11 @@ chain is the proof.
 Built for NEAR HACKATHON 2026 in the `security`, `agents` and `open` tracks. Everything runs on testnet, and every claim
 in this file says whether it ran on the real ESP32-S3, on the labelled software simulator, or has not been shown yet.
 
+**Hosted demo:** https://fuse-demo.onrender.com runs the labelled software simulator against testnet: the live page, the
+red-team page (paste an attack, watch the refusal land onchain) and the counterparty registry are open to anyone. It is
+on a free instance that sleeps when idle, so the first load can take a minute. The real chip only runs on the desk; it
+is in the video and the photos below.
+
 ---
 
 ## What happens when an agent buys something
@@ -58,6 +63,13 @@ The verdict words are the ones the organisers used: **allow** (inside the budget
 thumb threshold or the quorum line, a human or a second chip is needed), **block** (refused, receipt onchain).
 
 ## Try it
+
+### In the browser, nothing to install
+
+Open https://fuse-demo.onrender.com/red-team, paste any invoice or instruction that tries to redirect the payment, and
+click "Run it". The simulated chip refuses it, the refusal receipt is stored by the wallet contract on testnet, and
+https://fuse-demo.onrender.com/counterparty shows the registry verdict for the address you tried. The hosted chip is
+software and every screen says so; the hardware path is the sections below.
 
 ### In ten seconds, offline
 
