@@ -1,0 +1,31 @@
+# bridge
+
+Untrusted laptop relay (TypeScript, Node 22+). Builds unsigned NEAR transactions with near-api-js, hands the
+raw Borsh bytes to the chip, broadcasts what the chip signs, posts refusal receipts, and serves a local API
+for the dashboard, the agent and the MCP server. It holds no keys.
+
+```sh
+cp .env.example .env            # fill accounts; SIMULATE_CHIP=1 for the no-hardware path
+npm i
+npm test                        # strict decoder + policy + simulated chip (7 tests)
+npm run fuse -- hello           # chip identity (mode HARDWARE or SIMULATED)
+npm run fuse -- keys            # the agent account's access keys on chain: expect exactly one function-call key
+npm run fuse -- enroll          # one tx: add the chip key (unlimited allowance), delete the bootstrap key
+npm run fuse -- pay -r api.<owner>.testnet -t near -a 100000000000000000000000 -m "api call"
+npm run fuse -- onchain         # wallet contract views
+npm run fuse -- serve           # http://127.0.0.1:7777 : GET /status /log /onchain, POST /pay /chain-sig, WS /events
+```
+
+`SIMULATE_CHIP=1` runs `src/chip-sim.ts`: the same decoder and policy as the firmware with a software key in
+`data/sim-chip-state.json`. Every response from it says `SIMULATED`. `SIM_BUTTON=deny` makes the simulated
+button time out.
+
+Hardware serial: `src/chip-serial.ts` has two transports. On macOS it opens the device as a file with non-blocking
+polled reads (`SERIAL_TRANSPORT=fs`, the default there) because the `serialport` binding's poller never wakes for the
+ESP32-S3's native USB CDC device; elsewhere it uses `serialport` (`SERIAL_TRANSPORT=serialport` forces it). Writes go
+out in 64-byte chunks so small firmware RX buffers are not overrun. On a CP2102/CH340 UART bridge it drops DTR/RTS after
+opening so the board is not held in reset.
+
+Scripts: `scripts/borsh-vector.mjs` prints the near-api-js transaction vector the firmware tests decode.
+`scripts/chip-smoke.ts` decodes and signs (or refuses) a real `pay` transaction on the attached chip and verifies the
+signature or refusal receipt locally; nothing is broadcast.

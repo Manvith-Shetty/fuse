@@ -1,0 +1,34 @@
+import * as n from 'near-api-js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import * as ed from '@noble/ed25519';
+const kp = n.KeyPairEd25519.fromRandom();
+const pk = kp.getPublicKey();
+const blockHash = new Uint8Array(32).fill(7);
+const args = new TextEncoder().encode(JSON.stringify({receiver:"api.testnet",token:"usdc.testnet",amount:"2000000",memo:"m"}));
+const act = n.actions.functionCall("pay", args, 30_000_000_000_000n, 0n);
+const tx = n.createTransaction("agent.alice.testnet", pk, "fuse.alice.testnet", 42n, [act], blockHash);
+const bytes = n.encodeTransaction(tx);
+console.log("len", bytes.length);
+console.log("hex", Buffer.from(bytes).toString('hex'));
+// hand decode
+let o=0; const u32=()=>{const v=new DataView(bytes.buffer,bytes.byteOffset+o,4).getUint32(0,true); o+=4; return v;};
+const u64=()=>{const v=new DataView(bytes.buffer,bytes.byteOffset+o,8).getBigUint64(0,true); o+=8; return v;};
+const u128=()=>{const lo=u64(); const hi=u64(); return hi<<64n|lo;};
+const str=()=>{const l=u32(); const s=new TextDecoder().decode(bytes.slice(o,o+l)); o+=l; return s;};
+const bytesN=(k)=>{const b=bytes.slice(o,o+k); o+=k; return b;};
+const d={};
+d.signer=str(); d.keyType=bytes[o++]; d.pub=Buffer.from(bytesN(32)).toString('hex'); d.nonce=u64(); d.receiver=str(); d.blockHash=Buffer.from(bytesN(32)).toString('hex');
+d.nActions=u32(); d.tag=bytes[o++]; d.method=str(); const al=u32(); d.args=new TextDecoder().decode(bytesN(al)); d.gas=u64(); d.deposit=u128(); d.trailing=bytes.length-o;
+console.log(JSON.stringify(d,(k,v)=>typeof v==='bigint'?v.toString():v,1));
+console.log("pub matches", d.pub===Buffer.from(pk.data).toString('hex'));
+// hash + sign + signed tx encoding
+const hash = sha256(bytes);
+const seed = n.baseDecode(kp.secretKey).slice(0,32);
+const sig = await ed.signAsync(hash, seed);
+const sig2 = kp.sign(hash).signature;
+console.log('noble sig == near-api-js sig', Buffer.from(sig).equals(Buffer.from(sig2)));
+console.log('seed is first 32 of secretKey, pub is last 32', Buffer.from(n.baseDecode(kp.secretKey).slice(32)).equals(Buffer.from(pk.data)));
+const signed = new n.SignedTransaction({transaction: tx, signature: new n.Signature({keyType: n.KeyType.ED25519, data: sig})});
+const sbytes = signed.encode();
+console.log("signed len", sbytes.length, "= tx+1+64:", bytes.length+65===sbytes.length, "tail keytype", sbytes[bytes.length], "sig matches", Buffer.from(sbytes.slice(bytes.length+1)).equals(Buffer.from(sig)));
+console.log("txhash b58", n.baseEncode(hash));
