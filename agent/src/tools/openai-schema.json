@@ -1,0 +1,30 @@
+{
+  "note": "OpenAI-style function tool definitions for a Fuse-guarded agent. Point the tool runtime at the bridge (POST /pay, GET /check). The agent proposes; the chip decides; refusals are recorded onchain.",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "fuse_pay",
+        "description": "Propose a payment from the agent's NEAR wallet. You hold no key: a hardware chip (Fuse) decodes the transaction bytes, applies its policy and signs or refuses. Refusals are recorded onchain as signed receipts. Payments above the policy threshold wait for a human button press (up to 30 s).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "receiver": { "type": "string", "description": "NEAR account to pay" },
+            "token": { "type": "string", "description": "\"near\" for native NEAR or a NEP-141 contract id" },
+            "amount": { "type": "string", "description": "decimal string in atomic units (yoctoNEAR for near)" },
+            "memo": { "type": "string" }
+          },
+          "required": ["receiver", "token", "amount"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "fuse_check_counterparty",
+        "description": "Ask the shared Fuse refusal registry about an account before paying it. Returns allow, warn or block with evidence counts (how many chips refused payments to it, how many distinct reporters).",
+        "parameters": { "type": "object", "properties": { "receiver": { "type": "string" } }, "required": ["receiver"] }
+      }
+    }
+  ]
+}

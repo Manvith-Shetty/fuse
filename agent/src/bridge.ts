@@ -9,5 +9,8 @@ export class BridgeClient {
   }
   status() { return this.req('GET', '/status'); }
   onchain() { return this.req('GET', '/onchain'); }
-  pay(p: { receiver: string; token: string; amount: string; memo?: string }) { return this.req('POST', '/pay', p); }
+  // decision: an attested model decision envelope (protocol v2); the bridge forwards it to the chip.
+  pay(p: { receiver: string; token: string; amount: string; memo?: string; decision?: unknown }) { return this.req('POST', '/pay', p); }
+  // Shared refusal registry verdict for a receiver: allow / warn / block.
+  check(receiver: string) { return this.req('GET', `/check?receiver=${encodeURIComponent(receiver)}`); }
 }
