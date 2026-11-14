@@ -1,0 +1,9 @@
+{
+  "note": "Services the agent may buy. Prices in yoctoNEAR. The seller is a testnet account; this is a demo marketplace.",
+  "services": [
+    { "id": "weather", "seller": "api.fuse-hack-2026.testnet", "name": "Weather report (city)", "price": "1000000000000000000000", "token": "near" },
+    { "id": "fx", "seller": "api.fuse-hack-2026.testnet", "name": "FX rate snapshot", "price": "2000000000000000000000", "token": "near" },
+    { "id": "summarize", "seller": "api.fuse-hack-2026.testnet", "name": "Document summary (1 page)", "price": "5000000000000000000000", "token": "near" },
+    { "id": "bulk-export", "seller": "api.fuse-hack-2026.testnet", "name": "Bulk data export (needs owner button)", "price": "600000000000000000000000", "token": "near" }
+  ]
+}
