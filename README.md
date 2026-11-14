@@ -31,38 +31,9 @@ All of this ran on the real chip on 14 November 2026. The transactions are linke
 
 ## How the pieces fit
 
-```mermaid
-flowchart LR
-    subgraph laptop [Your laptop]
-        agent[Agent<br/>Claude Code via MCP,<br/>or the purchasing agent]
-        bridge[Bridge<br/>builds transactions,<br/>holds no keys]
-        ui[Frontend<br/>live view, red team,<br/>setup wizard]
-    end
-    subgraph chip [Fuse chip  ESP32-S3]
-        fw[Firmware<br/>decodes raw bytes,<br/>enforces policy, button]
-        key[(ed25519 key<br/>never leaves)]
-    end
-    subgraph near [NEAR testnet]
-        acct[Agent account<br/>one function-call key]
-        wallet[fuse-wallet contract<br/>policy, daily cap,<br/>verified refusal receipts,<br/>quorum]
-        registry[fuse-registry<br/>shared refusal evidence]
-        mpc[Chain Signatures<br/>Sepolia, Bitcoin]
-    end
-    vendor[Vendor API<br/>HTTP 402, verifies<br/>payment onchain]
+![How Fuse fits together: the agent proposes, the chip decides, the chain remembers](docs/architecture.png)
 
-    agent -- "propose: pay, fetch" --> bridge
-    ui --> bridge
-    bridge -- "raw transaction bytes" --> fw
-    fw --- key
-    fw -- "signature, or signed refusal" --> bridge
-    bridge -- "broadcast" --> acct
-    acct -- "pay / record_refusal" --> wallet
-    wallet -- "refusal evidence" --> registry
-    wallet -- "request_chain_sig" --> mpc
-    bridge -- "check vendor" --> registry
-    agent -- "402, then retry with tx hash" --> vendor
-    vendor -- "reads the payment" --> wallet
-```
+*Hand-drawn in Excalidraw; the editable source is [docs/architecture.excalidraw](docs/architecture.excalidraw).*
 
 Three independent locks enforce the same budget, so any one of them failing still bounds the loss:
 
