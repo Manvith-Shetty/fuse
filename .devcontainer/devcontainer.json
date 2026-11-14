@@ -1,0 +1,9 @@
+{
+  "name": "fuse (simulator path)",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "features": { "ghcr.io/devcontainers/features/rust:1": { "version": "latest", "targets": "wasm32-unknown-unknown" } },
+  "postCreateCommand": "npm i -g near-cli-rs && (cd bridge && npm i) && (cd agent && npm i) && (cd dashboard && npm i) && (cd mcp && npm i && npm run build) && (cd seller && npm i)",
+  "forwardPorts": [7777, 7778, 7779, 5173, 3000],
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint", "rust-lang.rust-analyzer"] } },
+  "remoteEnv": { "NEAR_RPC_URL": "https://test.rpc.fastnear.com" }
+}

@@ -1,0 +1,43 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: bridge/package-lock.json }
+      - run: cd bridge && npm ci && npx tsc -p tsconfig.json --noEmit && npm test
+      - run: cd agent && npm ci && npx tsc -p tsconfig.json --noEmit
+      - run: cd seller && npm ci && npm run typecheck
+      - run: cd mcp && npm ci && npm run build
+      - run: cd dashboard && npm ci && npx tsc -p tsconfig.json --noEmit
+      - run: cd contracts/fuse-wallet/res && sha256sum -c SHA256SUMS
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "contracts/fuse-wallet -> target\ncontracts/fuse-registry -> target" }
+      - run: cd contracts/fuse-wallet && cargo test
+      - run: if [ -d contracts/fuse-registry ]; then cd contracts/fuse-registry && cargo test; fi
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install platformio
+      - run: cd firmware && pio test -e native
+      - run: cd firmware && pio run -e esp32s3_usb
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: if [ -f frontend/package.json ]; then cd frontend && npm ci && npm run typecheck && npm test -- --run && npm run build; fi
