@@ -1,0 +1,10 @@
+{
+  "name": "fuse-near-hackathon",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fuse: a hardware key for AI agents on NEAR (workspace root)",
+  "scripts": {
+    "attacks": "cd bridge && npm i --silent && ln -sfn ../bridge/node_modules ../attacks/node_modules && npx tsx ../attacks/src/run.ts",
+    "attacks:dry": "cd bridge && ln -sfn ../bridge/node_modules ../attacks/node_modules && npx tsx ../attacks/src/run.ts --no-broadcast"
+  }
+}

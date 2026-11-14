@@ -1,0 +1,38 @@
+# secrets
+.env
+.env.*
+!.env.example
+bridge/keys/
+**/*.key
+**/neardev/
+
+# node
+node_modules/
+dist/
+build/
+.turbo/
+*.log
+
+# rust / near
+target/
+contracts/**/res/*.wasm
+contracts/**/out/
+
+# platformio
+.pio/
+firmware/.vscode/
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# attack reports are regenerated
+attacks/report.json
+
+# runtime data: simulator state (contains the SIMULATED chip seed), logs, compromised-chip copies
+bridge/data/*
+!bridge/data/sim-policy.json
+attacks/data/
+attacks/node_modules
