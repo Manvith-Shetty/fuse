@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { SerialPort } from 'serialport';
-import { Chip, type HelloResult, type SignResult } from './chip.js';
+import { Chip, type HelloResult, type SignResult, type DecisionEnvelope, type PolicyAuth, type PolicySetResult } from './chip.js';
 import type { Policy } from './policy.js';
 
 // Newline-delimited JSON over a serial device (docs/protocol.md). One outstanding request per id.
@@ -152,10 +152,15 @@ export class SerialChip extends Chip {
   }
   hello() { return this.request<HelloResult>({ op: 'hello' }, 3000); }
   ping() { return this.request<{ pong: true; uptime_ms: number }>({ op: 'ping' }, 1500); }
-  sign(txBytes: Uint8Array, hint: string) { return this.request<SignResult>({ op: 'sign', tx: Buffer.from(txBytes).toString('base64'), hint }, 45_000); }
+  sign(txBytes: Uint8Array, hint: string, decision?: DecisionEnvelope) { return this.request<SignResult>({ op: 'sign', tx: Buffer.from(txBytes).toString('base64'), hint, ...(decision ? { decision } : {}) }, 45_000); }
   decode(txBytes: Uint8Array) { return this.request<any>({ op: 'decode', tx: Buffer.from(txBytes).toString('base64') }, 3000); }
   policyGet() { return this.request<{ policy: Policy; policy_hash: string }>({ op: 'policy_get' }, 3000); }
-  policySet(policy: Policy) { return this.request<any>({ op: 'policy_set', policy }, 45_000); }
+  // v2 chips need seq + owner_sig (+ owner_pubkey on the first set); a v1 chip ignores the extra fields.
+  policySet(policy: Policy, auth?: PolicyAuth) {
+    // Wire names (docs/protocol.md v2): the bridge's `scheme` travels as `owner_sig_scheme`.
+    const { scheme, ...rest } = auth ?? ({} as PolicyAuth);
+    return this.request<PolicySetResult>({ op: 'policy_set', policy, ...rest, ...(scheme ? { owner_sig_scheme: scheme } : {}) }, 45_000);
+  }
   async close() {
     this.closing = true; if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     // Give the firmware time to finish the `Serial.flush()` of its last reply: closing mid-transfer wedges the S3's USB CDC until a reset.
