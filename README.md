@@ -1,5 +1,7 @@
 # Fuse
 
+[![ci](https://github.com/Manvith-Shetty/fuse/actions/workflows/ci.yml/badge.svg)](https://github.com/Manvith-Shetty/fuse/actions/workflows/ci.yml)
+
 **Give your agent a budget, not your keys.**
 
 Coding agents and autonomous agents now pay for things: an API call, a dataset, a minute of compute. Today that means
@@ -49,7 +51,25 @@ Three independent locks enforce the same budget, so any one of them failing stil
 The verdict words are the ones the organisers used: **allow** (inside the budget, the chip signs), **warn** (above the
 thumb threshold or the quorum line, a human or a second chip is needed), **block** (refused, receipt onchain).
 
-## Try it in five minutes, no hardware
+## Try it
+
+### In ten seconds, offline
+
+```sh
+cd bridge && npm i && npm run story
+```
+
+No network, no accounts, no hardware: the simulated chip (the firmware's decoder and policy with a throwaway software
+key) is driven through the five moments of the demo and every verdict is checked locally. You see an unsigned policy
+refused and the owner's signed one accepted, a payment inside the budget signed, a bigger one waiting for the button, a
+poisoned invoice refused with a receipt that verifies for the attacker and for nobody else, and six more walls (over
+the cap, wrong token, wrong firmware, wrong method, replayed bytes). It ends with "Every verdict matched" in about a second.
+
+`npm run preflight` from the repository root checks that this README is consistent with the code: artifact checksums,
+every relative link, that no secret is tracked, and the Node test suites (`--full` adds the Rust and firmware suites).
+`npm run test:all` runs all 150 tests across the five packages.
+
+### In five minutes, on testnet, no hardware
 
 You need Node 22 and `near-cli-rs` (`npm i -g near-cli-rs`). No Rust: the contract bytes deployed on testnet are
 committed under `contracts/fuse-wallet/res/` with checksums.
@@ -80,6 +100,16 @@ cd frontend && npm i && npm run dev                 # the product UI on http://l
 
 Open the UI. The Live page pays the vendor with one click and injects an attack with another. The Red team page lets
 anyone paste a document and watch the chip decide. Stop the bridge and the page says AGENT REVOKED within two seconds.
+
+These are the pages running against the real chip on 14 November, not mockups:
+
+| The story | Live, on the real chip |
+| --- | --- |
+| ![Landing page](docs/shots/landing.png) | ![Live page: the chip, one payment button, the last eight events in plain words](docs/shots/live.png) |
+
+| Red team | Setup wizard |
+| --- | --- |
+| ![Red team page: paste anything, one verdict word](docs/shots/redteam.png) | ![Setup wizard, step 2: the real chip recognised, with its owner key](docs/shots/setup-chip.png) |
 
 ### With Claude Code
 
@@ -146,6 +176,17 @@ The complete list, with every transaction, is `docs/claims-ledger.md`. The live 
   ledger, the demo script, the use case, the mainnet path, the hardware roadmap and secure-boot notes, and the
   organisers' track prompts.
 
+## What broke, and what it taught us
+
+Two bugs only the real board and the real chain could find. First, the ESP32-S3 went silent after every command on
+Windows: the firmware's `Serial.flush()` after a reply never returned once the host had closed the USB port mid-transfer,
+and only a reset brought it back. The bridge now pulses a reset over RTS when a chip is silent on open, and firmware 0.2.0
+bounds the flush. Second, the smoke test made the chip sign a transaction that was never broadcast, so the chip's last
+nonce ran ahead of the chain and every later payment, and its refusal receipt, came back `NONCE_REPLAY`. The chip was
+right to refuse; the bridge now builds with the larger of the chain's next nonce and the chip's. Both are in
+`FUSE_HANDOFF.md` with the transactions that exposed them. A third, cheaper lesson: the wallet contract needs about 2.7
+NEAR locked for its own storage, and a payment that would dip below it fails with `LackBalanceForState`.
+
 ## Honest limits
 
 A development board is not a hardware security module: secure boot and flash encryption are the production step and
@@ -158,6 +199,13 @@ without trusted reporters.
 
 ## Where this stands next to other work
 
+Most agent wallets this month, including good ones in this hackathon such as Veto, are software firewalls: a policy
+check in the agent's process, in a proxy, or in a contract the agent's key calls. They decide well and refuse with
+reasons. Their shared failure mode is the key: it still lives on a machine the agent runs on, so a compromised host can
+sign around the check, or take the key and skip it. Fuse keeps the key where the host cannot copy it, puts the decision
+where the host cannot skip it, and has the refusal signed by something the host does not control, which is what makes
+it evidence other agents can trust.
+
 EspWarden put a policy signer on an ESP32 for Ethereum bots; Fuse adds NEAR's function-call key scoping as a
 protocol-level lock, refusals as shared onchain evidence, owner-signed policy, quorum, attested decisions and the MCP
 path for coding agents. NEAR's own Intents Agent API keeps the policy on a hosted server; in Fuse it lives in silicon
@@ -165,5 +213,8 @@ you hold plus the contract, with no hosted party to trust and revocation by cabl
 approve each transaction on a device; the Fuse chip enforces the policy itself, so the human is only needed above a
 threshold and the agent runs unattended within bounds. LeekWallet is a do-it-yourself hardware wallet for people; Fuse
 is a budget key for agents, with no screen, no blind-signing override, and a policy instead of a prompt.
+
+Questions a careful reader asks (why not an allowance alone, why not a multisig, what if the chip is stolen) are
+answered in [docs/FAQ.md](docs/FAQ.md). Scope, known gaps and how to report a hole: [SECURITY.md](SECURITY.md).
 
 MIT licence. See `LICENSE`.
