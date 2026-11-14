@@ -4,16 +4,22 @@ The Fuse chip. An ESP32 that holds the agent's only NEAR key, decodes every tran
 enforces policy, needs a button press above a threshold, and signs over USB serial. **No network.**
 
 Layout:
-- `lib/fusecore/` platform-independent core: `borsh.cpp` strict NEAR Transaction decoder, `policy.cpp` rules,
-  `util.cpp` base58/base64/decimal compare, `codes.h` refusal codes (mirrored in `bridge/src/codes.ts`).
-- `src/` Arduino shell: `main.cpp` serial protocol + sign path, `keystore.cpp` NVS seed/nonce/counter/policy,
-  `ui.cpp` LED patterns + BOOT button.
-- `test/test_native/` unit tests that run on the Mac (no board): the near-api-js vector, trailing bytes,
-  multi-action, every refusal code, refusal matching, policy JSON round-trip, encodings.
+- `lib/fusecore/` platform-independent core: `borsh.cpp` strict NEAR Transaction decoder, `policy.cpp` rules
+  (incl. the v2 `fw` check, `approve_payment`, the attested-decision check, receipt v2 and policy_set digests),
+  `util.cpp` base58/base64/decimal compare, `codes.h` refusal codes (mirrored in `bridge/src/codes.ts`),
+  `crypto_iface.h` the two primitives the core needs (sha256, ed25519 verify).
+- `src/` Arduino shell: `main.cpp` serial protocol v2 + sign path, `keystore.cpp` NVS seed/nonce/counter/policy/owner key,
+  `crypto_board.cpp` rweather/Crypto behind `crypto_iface.h`, `ui.cpp` LED patterns + BOOT button.
+- `test/test_native/` unit tests that run on the laptop (no board): the near-api-js vector, trailing bytes,
+  multi-action, every refusal code, refusal matching, policy JSON round-trip (v1 and v2 fields), encodings, the
+  shared receipt-v2 digest vector, fw-argument cases, approve_payment, decision check with a fixed ed25519 vector,
+  owner policy_set digest, and a 200,000-case deterministic mutation fuzz of the decoder + policy.
+  `crypto_host.cpp` is the host implementation of `crypto_iface.h` (FIPS SHA-2 plus a TweetNaCl-derived ed25519
+  verifier, test code only).
 
 ## Build and test (no board needed)
 ```sh
-pio test -e native          # 11 tests
+pio test -e native          # 21 tests, ~1 s (needs a host gcc/clang: Xcode CLT on macOS; `scoop install gcc` on Windows)
 pio run -e esp32dev         # classic ESP32 (WROOM-32 DevKitC / NodeMCU-32S): LED GPIO2, BOOT GPIO0
 pio run -e esp32s3_usb      # ESP32-S3-DevKitC-1, cable in the native "USB" port (what we use)
 pio run -e esp32s3          # ESP32-S3-DevKitC-1, cable in the UART/"COM" port (CP2102)
@@ -34,9 +40,11 @@ pio device list                                             # find the port
 pio run -e esp32s3_usb -t upload --upload-port /dev/cu.usbmodem1101
 pio device monitor -p /dev/cu.usbmodem1101 -b 115200        # boot prints {"event":"ready","pubkey":"ed25519:..."}
 ```
-Serial quirks the firmware handles: every reply ends with `Serial.flush()` (native USB CDC otherwise holds short
-writes until the next host write) and the RX buffer is 16 KB (a sign request is about 450 bytes and arrives in
-one USB burst; the 256-byte default overflowed).
+Serial quirks the firmware handles: every reply is one `Serial.write` followed by a bounded (<= 50 ms) wait for the USB
+TX buffer to drain, skipped when the host has been silent for 5 s (native USB CDC otherwise holds short writes until
+the next host write; an unbounded `Serial.flush()` used to wedge the board when the host closed the port). The RX
+buffer is 16 KB (a sign request is about 450 bytes, up to ~12 KB with a bound decision, and arrives in USB bursts;
+the 256-byte default overflowed).
 
 ## Enrol (board needed)
 In `bridge/.env`: `SIMULATE_CHIP=0`, `SERIAL_PORT=/dev/cu.usbmodem1101`, `AGENT_ACCOUNT=<fresh agent sub-account>`.
@@ -48,7 +56,7 @@ near contract call-function as-transaction fuse.<owner>.testnet set_chip_key jso
   prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as <owner>.testnet network-config testnet sign-with-legacy-keychain send
 near contract call-function as-transaction fuse.<owner>.testnet set_agent json-args '{"agent":"<agent account>"}' ...   # if the agent account changed
 npm run fuse -- enroll                            # agent account: add the chip key, delete the bootstrap key (one tx)
-npm run fuse -- policy set ../firmware/policy.s3.json   # LED blinks amber: press BOOT within 30 s
+npm run fuse -- policy set ../firmware/policy.s3.json   # owner-signed (protocol v2); LED blinks amber: press BOOT within 30 s
 npm run fuse -- pay -r api.<owner>.testnet -t near -a 100000000000000000000000 -m "first hardware payment"
 ```
 Why a fresh agent account: once enrolled, the agent account's only key is the chip's function-call key, which

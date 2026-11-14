@@ -10,6 +10,8 @@ enum Code : uint8_t {
   RECEIVER_NOT_ALLOWED = 13, TOKEN_NOT_ALLOWED = 14, AMOUNT_OVER_CAP = 15, VELOCITY_CAP = 16,
   BUTTON_TIMEOUT = 17, REFUSAL_MISMATCH = 18, CHAIN_DEST_NOT_ALLOWED = 19, CHAIN_VALUE_OVER_CAP = 20,
   BAD_POLICY = 21, TX_TOO_LARGE = 22,
+  // protocol v2 (docs/v2-spec.md section 1)
+  FW_MISMATCH = 23, DECISION_REQUIRED = 24, DECISION_INVALID = 25, OWNER_SIG_INVALID = 26, APPROVAL_NOT_ALLOWED = 27,
 };
 inline const char* codeName(uint8_t c) {
   switch (c) {
@@ -25,6 +27,9 @@ inline const char* codeName(uint8_t c) {
     case BUTTON_TIMEOUT: return "BUTTON_TIMEOUT"; case REFUSAL_MISMATCH: return "REFUSAL_MISMATCH";
     case CHAIN_DEST_NOT_ALLOWED: return "CHAIN_DEST_NOT_ALLOWED"; case CHAIN_VALUE_OVER_CAP: return "CHAIN_VALUE_OVER_CAP";
     case BAD_POLICY: return "BAD_POLICY"; case TX_TOO_LARGE: return "TX_TOO_LARGE";
+    case FW_MISMATCH: return "FW_MISMATCH"; case DECISION_REQUIRED: return "DECISION_REQUIRED";
+    case DECISION_INVALID: return "DECISION_INVALID"; case OWNER_SIG_INVALID: return "OWNER_SIG_INVALID";
+    case APPROVAL_NOT_ALLOWED: return "APPROVAL_NOT_ALLOWED";
     default: return "UNKNOWN";
   }
 }

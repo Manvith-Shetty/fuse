@@ -75,15 +75,21 @@ bool isDecimal(const std::string& s) {
   return true;
 }
 
-static std::string stripZeros(const std::string& s) {
+std::string stripLeadingZeros(const std::string& s) {
   size_t i = 0; while (i + 1 < s.size() && s[i] == '0') i++;
   return s.substr(i);
 }
 
 int cmpDecimal(const std::string& a0, const std::string& b0, bool& ok) {
   ok = isDecimal(a0) && isDecimal(b0); if (!ok) return 0;
-  std::string a = stripZeros(a0), b = stripZeros(b0);
+  std::string a = stripLeadingZeros(a0), b = stripLeadingZeros(b0);
   if (a.size() != b.size()) return a.size() < b.size() ? -1 : 1;
   return a.compare(b);
+}
+
+bool parseKey32(const std::string& s0, uint8_t out[32]) {
+  std::string s = s0; if (s.rfind("ed25519:", 0) == 0) s = s.substr(8);
+  std::vector<uint8_t> k; if (s.empty() || !base58Decode(s, k) || k.size() != 32) return false;
+  memcpy(out, k.data(), 32); return true;
 }
 }
