@@ -20,7 +20,7 @@ Deadline: 2026-11-14 23:59 UTC (15 Nov 05:29 IST). One submission per repo. One 
   "size": "1",
   "tracks": ["security", "agents", "open"],
   "nearAddress": "<mainnet account>",
-  "projectUrl": "https://github.com/<user>/<repo>",
+  "projectUrl": "https://github.com/Manvith-Shetty/fuse",
   "demoUrl": "https://x.com/<user>/status/<id>",
   "idea": "<20-2000 chars: problem, product, how NEAR fits>",
   "consent": true

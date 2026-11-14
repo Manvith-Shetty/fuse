@@ -6,7 +6,7 @@ Fuse (built at NEAR HACKATHON) puts a NEAR function-call key on an ESP32 that pa
 itself, refuses prompt-injected payments, needs a button press for big ones, and records refusals onchain.
 Unplug it and the agent is revoked. The same chip approves Ethereum payments via Chain Signatures.
 
-Repo: <link>
+Repo: https://github.com/Manvith-Shetty/fuse
 What would you want the chip to refuse that it doesn't yet?
 
 @NEARProtocol #NEARHackathon @NearBuilders
@@ -20,7 +20,7 @@ refuses prompt-injected payments and posts the signed refusal onchain, needs a b
 second chip for huge ones, and only pays for decisions a TEE actually made. Unplug it: the agent is revoked.
 Other agents can ask the shared refusal registry before they pay anyone.
 
-Repo: <link>  Try to rob my agent: <red-team link, while it is up>
+Repo: https://github.com/Manvith-Shetty/fuse  Try to rob my agent: <red-team link, while it is up>
 What should the chip refuse that it doesn't yet?
 
 @NEARProtocol #NEARHackathon @NearBuilders
@@ -34,7 +34,7 @@ transaction itself, refuses anything outside the policy, wants my thumb above a 
 In the video: Claude Code buys an API call for 0.001 NEAR, a poisoned invoice tries to redirect 0.5 NEAR, the chip says no,
 and the refusal lands onchain where every other Fuse agent can see it.
 
-Repo: <link>
+Repo: https://github.com/Manvith-Shetty/fuse
 If you let an agent spend money today, what stops it from spending all of it?
 
 @NEARProtocol #NEARHackathon @NearBuilders

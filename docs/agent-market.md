@@ -23,4 +23,4 @@ cannot exceed the daily cap, cannot act while the chip is unplugged.
 **Endpoint**: the agent runs next to the chip (`agent/src/index.ts serve`); expose it through a reverse proxy with TLS.
 Tool schemas for MCP clients: `mcp/` (Claude Code, Claude Desktop); for OpenAI-style tool runtimes: `agent/src/tools/`.
 
-**Repo**: <public repository link>
+**Repo**: https://github.com/Manvith-Shetty/fuse
