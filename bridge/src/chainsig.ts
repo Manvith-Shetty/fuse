@@ -15,8 +15,9 @@ export class ChainSig {
   readonly mpc: InstanceType<typeof contracts.ChainSignatureContract>;
   readonly evm: InstanceType<typeof chainAdapters.evm.EVM>;
   readonly client: PublicClient;
-  constructor(public key: ChainKey, rpcUrl?: string, network: 'testnet' | 'mainnet' = 'testnet') {
-    this.mpc = new contracts.ChainSignatureContract({ networkId: network, contractId: constants.CONTRACT_ADDRESSES[network === 'mainnet' ? 'MAINNET' : 'TESTNET'] });
+  // nearRpcUrl: where the MPC contract's root key is read from (the library's default testnet RPC is deprecated and stalls).
+  constructor(public key: ChainKey, rpcUrl?: string, network: 'testnet' | 'mainnet' = 'testnet', nearRpcUrl?: string) {
+    this.mpc = new contracts.ChainSignatureContract({ networkId: network, contractId: constants.CONTRACT_ADDRESSES[network === 'mainnet' ? 'MAINNET' : 'TESTNET'], ...(nearRpcUrl ? { fallbackRpcUrls: [nearRpcUrl] } : {}) } as any);
     this.client = createPublicClient({ chain: CHAINS[key].chain, transport: http(rpcUrl) }) as PublicClient;
     this.evm = new chainAdapters.evm.EVM({ publicClient: this.client as any, contract: this.mpc });
   }
