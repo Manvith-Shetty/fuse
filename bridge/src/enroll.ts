@@ -11,8 +11,11 @@ import { Near, outcomeStatus } from './near.js';
 import type { Config } from './config.js';
 
 export const AGENT_METHODS = ['pay', 'record_refusal', 'request_chain_sig'];
+// A second chip enrolled as an approver can do exactly one thing: approve pending (quorum) payments. Spec 3.1.
+export const APPROVER_METHODS = ['approve_payment'];
 
-export async function enroll(cfg: Config, near: Near, chipPubkey: string, opts: { keepBootstrapKey?: boolean; credentialsFile?: string } = {}) {
+export async function enroll(cfg: Config, near: Near, chipPubkey: string, opts: { keepBootstrapKey?: boolean; credentialsFile?: string; methods?: string[] } = {}) {
+  const methods = opts.methods ?? AGENT_METHODS;
   const file = opts.credentialsFile ?? path.join(os.homedir(), '.near-credentials', cfg.NEAR_NETWORK, `${cfg.AGENT_ACCOUNT}.json`);
   if (!fs.existsSync(file)) throw new Error(`no bootstrap credentials for ${cfg.AGENT_ACCOUNT} at ${file}`);
   const cred = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -23,7 +26,7 @@ export async function enroll(cfg: Config, near: Near, chipPubkey: string, opts: 
 
   const nonce = (await near.accessKeyNonce(cfg.AGENT_ACCOUNT, bootstrapPk.toString())) + 1n;
   const blockHash = await near.latestBlockHash();
-  const acts = [actions.addFunctionCallAccessKey(chipPk, cfg.WALLET_CONTRACT, AGENT_METHODS)];
+  const acts = [actions.addFunctionCallAccessKey(chipPk, cfg.WALLET_CONTRACT, methods)];
   if (!opts.keepBootstrapKey) acts.push(actions.deleteKey(bootstrapPk));
   const tx = createTransaction(cfg.AGENT_ACCOUNT, bootstrapPk, cfg.AGENT_ACCOUNT, nonce, acts, baseDecode(blockHash));
   const bytes = encodeTransaction(tx);
@@ -31,5 +34,5 @@ export async function enroll(cfg: Config, near: Near, chipPubkey: string, opts: 
   const signed = new SignedTransaction({ transaction: tx, signature: new Signature({ keyType: KeyType.ED25519, data: sig }) });
   const outcome = await near.send(signed);
   const st = outcomeStatus(outcome);
-  return { ok: st.ok, error: st.error, hash: outcome?.transaction?.hash, chipPubkey, bootstrapDeleted: !opts.keepBootstrapKey, keys: await near.accessKeys(cfg.AGENT_ACCOUNT) };
+  return { ok: st.ok, error: st.error, hash: outcome?.transaction?.hash, chipPubkey, methods, bootstrapDeleted: !opts.keepBootstrapKey, keys: await near.accessKeys(cfg.AGENT_ACCOUNT) };
 }

@@ -4,8 +4,9 @@ import * as ed from '@noble/ed25519';
 import { sha256 } from '@noble/hashes/sha2.js';
 import bs58 from 'bs58';
 import { decodeTransaction } from '../src/borsh.js';
-import { evaluate, defaultPolicy } from '../src/policy.js';
+import { evaluate, defaultPolicy, refusalDigestV2 } from '../src/policy.js';
 import { SimChip } from '../src/chip-sim.js';
+import { signPolicyAuth } from '../src/keychain.js';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 
 const VEC_HEX = '130000006167656e742e616c6963652e746573746e657400563298983af5691517bda3169243e32d9da657a594c2ce394b7c04156802dcfc2a0000000000000012000000667573652e616c6963652e746573746e657407070707070707070707070707070707070707070707070707070707070707070100000002030000007061794f0000007b227265636569766572223a226170692e746573746e6574222c22746f6b656e223a22757364632e746573746e6574222c22616d6f756e74223a2232303030303030222c226d656d6f223a226d227d00e057eb481b000000000000000000000000000000000000';
@@ -62,9 +63,11 @@ describe('policy', () => {
 describe('simulated chip', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuse-sim-'));
   const mk = () => new SimChip({ dataDir: dir, agent: 'agent.alice.testnet', wallet: 'fuse.alice.testnet', button: 'press', buttonDelayMs: 10 }).init();
+  const owner = n.KeyPairEd25519.fromRandom(); // protocol v2: policy_set is signed by the owner key
   it('signs a policy-passing tx with a verifiable signature and labels itself SIMULATED', async () => {
     const chip = await mk(); const h = await chip.hello(); expect(h.mode).toBe('SIMULATED');
-    await chip.policySet({ ...defaultPolicy('agent.alice.testnet', 'fuse.alice.testnet'), receivers: ['api.testnet'], tokens: ['usdc.testnet'], per_tx_cap: '5000000', button_threshold: '9000000' });
+    const pol = { ...defaultPolicy('agent.alice.testnet', 'fuse.alice.testnet'), receivers: ['api.testnet'], tokens: ['usdc.testnet'], per_tx_cap: '5000000', button_threshold: '9000000' };
+    expect((await chip.policySet(pol, signPolicyAuth(pol, 1, owner))).ok).toBe(true);
     const pk = n.PublicKey.fromString(h.pubkey);
     const act = n.actions.functionCall('pay', new TextEncoder().encode(JSON.stringify({ receiver: 'api.testnet', token: 'usdc.testnet', amount: '2000000' })), 30n * 10n ** 12n, 0n);
     const tx = n.createTransaction('agent.alice.testnet', pk, 'fuse.alice.testnet', 5n, [act], new Uint8Array(32));
@@ -80,8 +83,9 @@ describe('simulated chip', () => {
     const tx = n.createTransaction('agent.alice.testnet', pk, 'fuse.alice.testnet', 50n, [bad], new Uint8Array(32)); const bytes = n.encodeTransaction(tx);
     const r = await chip.sign(bytes, 'evil'); expect(r.ok).toBe(false); if (r.ok) return;
     expect(r.code).toBe('RECEIVER_NOT_ALLOWED'); expect(r.receipt).toBeTruthy();
-    const txHash = sha256(bytes); const buf = new Uint8Array(52); buf.set(new TextEncoder().encode('FUSE_REFUSAL_V1'), 0); buf.set(txHash, 15); buf[47] = r.code_num!; new DataView(buf.buffer).setUint32(48, r.counter!, true);
-    expect(await ed.verifyAsync(Buffer.from(r.receipt!, 'base64'), sha256(buf), pk.data)).toBe(true);
+    // receipt v2 (docs/v2-spec.md 2.6): the refused receiver is bound into the digest
+    expect(r.receipt_v).toBe(2); expect(r.receiver).toBe('attacker.testnet');
+    expect(await ed.verifyAsync(Buffer.from(r.receipt!, 'base64'), refusalDigestV2(sha256(bytes), r.code_num!, r.counter!, 'attacker.testnet'), pk.data)).toBe(true);
     const rec = n.actions.functionCall('record_refusal', new TextEncoder().encode(JSON.stringify({ tx_hash: r.hash, code: r.code_num, counter: r.counter, receipt_sig: r.receipt })), 30n * 10n ** 12n, 0n);
     const tx2 = n.createTransaction('agent.alice.testnet', pk, 'fuse.alice.testnet', 51n, [rec], new Uint8Array(32));
     const r2 = await chip.sign(n.encodeTransaction(tx2), 'record'); expect(r2.ok).toBe(true);

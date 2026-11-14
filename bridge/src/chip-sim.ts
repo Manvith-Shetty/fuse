@@ -1,13 +1,14 @@
 // SIMULATED chip: the same decoder and policy as the firmware, a software ed25519 key on disk.
 // Exists so judges and the AI screeners can run the whole flow with no hardware. Every response says SIMULATED.
+// Protocol v2 (docs/v2-spec.md): receipt v2, owner-signed policy, attested decisions, fw attestation, approve_payment.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as ed from '@noble/ed25519';
 import { sha256 } from '@noble/hashes/sha2.js';
 import bs58 from 'bs58';
-import { Chip, type HelloResult, type SignResult } from './chip.js';
+import { Chip, type HelloResult, type SignResult, type DecisionEnvelope, type PolicyAuth, type PolicySetResult } from './chip.js';
 import { decodeTransaction } from './borsh.js';
-import { evaluate, defaultPolicy, type Policy, type RefusalRecord } from './policy.js';
+import { evaluate, defaultPolicy, checkDecision, policyAuthHash, policyHashHex, refusalDigestV2, parseKey32, type Policy, type RefusalRecord } from './policy.js';
 import { codeNum } from './codes.js';
 
 export interface SimOptions {
@@ -17,11 +18,15 @@ export interface SimOptions {
   // chip lock is gone. A real Fuse chip has no such mode: its policy is compiled into the firmware.
   unsafeSignAnything?: boolean;
 }
+// The simulator "firmware" attests a stable fake hash so the fw-argument flow can be exercised without a board.
+export const SIM_FW_VERSION = 'sim-0.2.0';
+export const SIM_FW_SHA256 = Buffer.from(sha256(new TextEncoder().encode(`fuse-${SIM_FW_VERSION}`))).toString('hex');
 
 export class SimChip extends Chip {
   readonly mode = 'SIMULATED' as const;
   private seed!: Uint8Array; private pub!: Uint8Array; private policy!: Policy;
   private lastNonce = 0n; private counter = 0; private refusals: RefusalRecord[] = []; private signTimes: number[] = [];
+  private ownerPub: Uint8Array | null = null; private policySeq = 0;
   private stateFile: string; private policyFile: string; private seq = 0;
   constructor(private opts: SimOptions) {
     super();
@@ -37,6 +42,7 @@ export class SimChip extends Chip {
     this.pub = await ed.getPublicKeyAsync(this.seed);
     this.lastNonce = BigInt(st.lastNonce ?? 0); this.counter = st.counter ?? 0;
     this.refusals = (st.refusals ?? []).map((r: any) => ({ hash: Buffer.from(r.hash, 'hex'), code: r.code, counter: r.counter }));
+    this.ownerPub = st.ownerPub ? Buffer.from(st.ownerPub, 'hex') : null; this.policySeq = st.policySeq ?? 0;
     if (fs.existsSync(this.policyFile)) this.policy = JSON.parse(fs.readFileSync(this.policyFile, 'utf8'));
     else { this.policy = defaultPolicy(this.opts.agent, this.opts.wallet); fs.writeFileSync(this.policyFile, JSON.stringify(this.policy, null, 2)); }
     this.save();
@@ -53,18 +59,25 @@ export class SimChip extends Chip {
       const seen = new Set(this.refusals.map(r => r.counter));
       for (const r of st.refusals ?? []) if (!seen.has(r.counter)) this.refusals.push({ hash: Buffer.from(r.hash, 'hex'), code: r.code, counter: r.counter });
       this.refusals.sort((a, b) => a.counter - b.counter); if (this.refusals.length > 16) this.refusals = this.refusals.slice(-16);
+      if (st.ownerPub && !this.ownerPub) this.ownerPub = Buffer.from(st.ownerPub, 'hex');
+      if ((st.policySeq ?? 0) > this.policySeq) { this.policySeq = st.policySeq; if (fs.existsSync(this.policyFile)) this.policy = JSON.parse(fs.readFileSync(this.policyFile, 'utf8')); }
     } catch { /* keep in-memory state */ }
   }
   private save() {
     fs.writeFileSync(this.stateFile, JSON.stringify({
       seed: Buffer.from(this.seed).toString('hex'), lastNonce: this.lastNonce.toString(), counter: this.counter,
       refusals: this.refusals.slice(-16).map(r => ({ hash: Buffer.from(r.hash).toString('hex'), code: r.code, counter: r.counter })),
+      ownerPub: this.ownerPub ? Buffer.from(this.ownerPub).toString('hex') : null, policySeq: this.policySeq,
       note: 'SIMULATED chip state. A real Fuse chip never exposes its seed; this file exists only so the no-hardware demo is reproducible.',
     }, null, 2));
   }
-  private policyHash() { return Buffer.from(sha256(new TextEncoder().encode(JSON.stringify(this.policy)))).toString('hex').slice(0, 16); }
+  private policyHash() { return policyHashHex(this.policy); }
   async hello(): Promise<HelloResult> {
-    const h: HelloResult & { compromised?: boolean } = { pubkey: 'ed25519:' + bs58.encode(this.pub), pubkey_hex: Buffer.from(this.pub).toString('hex'), fw: 'sim-0.1.0', policy_hash: this.policyHash(), counter: this.counter, last_nonce: this.lastNonce.toString(), mode: 'SIMULATED', board: 'simulator' };
+    const h: HelloResult & { compromised?: boolean } = {
+      pubkey: 'ed25519:' + bs58.encode(this.pub), pubkey_hex: Buffer.from(this.pub).toString('hex'), fw: SIM_FW_VERSION, fw_sha256: SIM_FW_SHA256,
+      policy_hash: this.policyHash(), counter: this.counter, last_nonce: this.lastNonce.toString(), mode: 'SIMULATED', board: 'simulator',
+      proto: 2, owner_pubkey: this.ownerPub ? 'ed25519:' + bs58.encode(this.ownerPub) : null, policy_seq: this.policySeq, receipt_v: 2,
+    };
     if (this.opts.unsafeSignAnything) h.compromised = true;
     return h;
   }
@@ -74,16 +87,19 @@ export class SimChip extends Chip {
     if (!r.ok) return { ok: false, code: r.code, mode: 'SIMULATED' };
     const t = r.tx; return { ok: true, code: 'OK', signer: t.signer, receiver: t.receiver, method: t.method, args: new TextDecoder().decode(t.args), nonce: t.nonce.toString(), gas: t.gas.toString(), pubkey_hex: Buffer.from(t.pubkey).toString('hex'), mode: 'SIMULATED' };
   }
-  private async refusalReceipt(txHash: Uint8Array, code: number) {
+  // Receipt v2: the receiver of a refused `pay` is bound into the digest so the shared registry can index evidence by receiver.
+  private async refusalReceipt(txHash: Uint8Array, code: number, receiver: string) {
     const counter = ++this.counter;
-    const buf = new Uint8Array(15 + 32 + 1 + 4); buf.set(new TextEncoder().encode('FUSE_REFUSAL_V1'), 0); buf.set(txHash, 15); buf[47] = code;
-    new DataView(buf.buffer).setUint32(48, counter, true);
-    const sig = await ed.signAsync(sha256(buf), this.seed);
+    const sig = await ed.signAsync(refusalDigestV2(txHash, code, counter, receiver), this.seed);
     this.refusals.push({ hash: txHash, code, counter }); if (this.refusals.length > 16) this.refusals.shift();
     this.save();
     return { receipt: Buffer.from(sig).toString('base64'), counter };
   }
-  async sign(txBytes: Uint8Array, _hint: string): Promise<SignResult> {
+  private static payArgs(dec: ReturnType<typeof decodeTransaction>): { receiver: string; amount: string } | null {
+    if (!dec.ok || dec.tx.method !== 'pay') return null;
+    try { const a = JSON.parse(new TextDecoder().decode(dec.tx.args)); return typeof a?.receiver === 'string' ? { receiver: a.receiver, amount: String(a.amount ?? '') } : null; } catch { return null; }
+  }
+  async sign(txBytes: Uint8Array, _hint: string, decisionEnv?: DecisionEnvelope): Promise<SignResult> {
     this.reload();
     const txHash = sha256(txBytes); const hash = bs58.encode(txHash);
     if (this.opts.unsafeSignAnything) {
@@ -93,11 +109,16 @@ export class SimChip extends Chip {
     const now = Date.now(); this.signTimes = this.signTimes.filter(t => now - t < this.policy.velocity_window_ms);
     const dec = decodeTransaction(txBytes);
     let decision: { verdict: string; code: any; detail: string; summary: string };
-    let decoded: any;
+    let decoded: any; let binding: 'none' | 'envelope' | 'bound' = 'none';
+    const pay = SimChip.payArgs(dec);
     if (!dec.ok) decision = { verdict: 'REFUSE', code: dec.code, detail: 'structural', summary: '' };
     else {
       decoded = { signer: dec.tx.signer, receiver: dec.tx.receiver, method: dec.tx.method, nonce: dec.tx.nonce.toString(), gas: dec.tx.gas.toString() };
-      decision = evaluate(this.policy, dec.tx, { chipPub: this.pub, lastNonce: this.lastNonce, recentSigns: this.signTimes.length, refusals: this.refusals });
+      decision = evaluate(this.policy, dec.tx, { chipPub: this.pub, lastNonce: this.lastNonce, recentSigns: this.signTimes.length, refusals: this.refusals, fwSha256: SIM_FW_SHA256 });
+      if (decision.verdict !== 'REFUSE' && pay) {
+        const d = await checkDecision(this.policy, pay, decisionEnv);
+        if (d.code !== 'OK') decision = { verdict: 'REFUSE', code: d.code, detail: d.detail, summary: '' }; else binding = d.binding;
+      }
     }
     if (decision.verdict === 'SIGN_WITH_BUTTON') {
       const id = `s${++this.seq}`;
@@ -106,19 +127,33 @@ export class SimChip extends Chip {
       if (this.opts.button === 'deny') decision = { verdict: 'REFUSE', code: 'BUTTON_TIMEOUT', detail: 'SIMULATED button not pressed', summary: '' };
     }
     if (decision.verdict === 'REFUSE') {
-      const { receipt, counter } = await this.refusalReceipt(txHash, codeNum(decision.code));
-      return { ok: false, hash, code: decision.code, code_num: codeNum(decision.code), detail: decision.detail, receipt, counter, decoded };
+      const receiver = pay?.receiver ?? '';
+      const { receipt, counter } = await this.refusalReceipt(txHash, codeNum(decision.code), receiver);
+      return { ok: false, hash, code: decision.code, code_num: codeNum(decision.code), detail: decision.detail, receipt, counter, decoded, receipt_v: 2, receiver };
     }
     const sig = await ed.signAsync(txHash, this.seed);
     this.lastNonce = dec.ok ? dec.tx.nonce : this.lastNonce; this.signTimes.push(now); this.save();
-    return { ok: true, hash, sig: Buffer.from(sig).toString('base64'), summary: decision.summary, button: decision.verdict === 'SIGN_WITH_BUTTON', decoded };
+    return { ok: true, hash, sig: Buffer.from(sig).toString('base64'), summary: decision.summary, button: decision.verdict === 'SIGN_WITH_BUTTON', decoded, decision: binding };
   }
   async policyGet() { return { policy: this.policy, policy_hash: this.policyHash() }; }
-  async policySet(policy: Policy) {
-    if (!policy?.agent || !policy?.wallet || !Array.isArray(policy.methods)) return { ok: false, code: 'BAD_POLICY' as const, detail: 'agent, wallet, methods required' };
+  // Owner-signed policy (spec 2.2): the first set binds the owner key; later sets must be signed by it with a higher seq.
+  async policySet(policy: Policy, auth?: PolicyAuth): Promise<PolicySetResult> {
+    this.reload();
+    if (!policy?.agent || !policy?.wallet || !Array.isArray(policy.methods)) return { ok: false, code: 'BAD_POLICY', detail: 'agent, wallet, methods required' };
+    if (!auth) return { ok: false, code: 'OWNER_SIG_INVALID', detail: 'policy_set needs seq and owner_sig (protocol v2)' };
+    const owner = this.ownerPub ?? (auth.owner_pubkey ? parseKey32(auth.owner_pubkey) : null);
+    if (!owner) return { ok: false, code: 'OWNER_SIG_INVALID', detail: 'no owner key stored: first policy_set must carry owner_pubkey' };
+    if (!Number.isInteger(auth.seq) || auth.seq <= this.policySeq) return { ok: false, code: 'OWNER_SIG_INVALID', detail: `seq must be > ${this.policySeq}` };
+    let sig: Uint8Array; try { sig = new Uint8Array(Buffer.from(auth.owner_sig, 'base64')); } catch { sig = new Uint8Array(); }
+    const hash = policyAuthHash(policy, auth); if (!hash) return { ok: false, code: 'OWNER_SIG_INVALID', detail: 'unknown owner_sig scheme or missing nep413 nonce/recipient' };
+    const okSig = sig.length === 64 && await ed.verifyAsync(sig, hash, owner).catch(() => false);
+    if (!okSig) return { ok: false, code: 'OWNER_SIG_INVALID', detail: `owner signature does not verify (${auth.scheme ?? 'raw'})` };
+    this.emit('button_required', { id: `p${++this.seq}`, summary: 'update policy', timeout_ms: 30000 });
     await new Promise(r => setTimeout(r, this.opts.buttonDelayMs));
-    if (this.opts.button === 'deny') return { ok: false, code: 'BUTTON_TIMEOUT' as const, detail: 'SIMULATED button not pressed' };
-    this.policy = policy; fs.writeFileSync(this.policyFile, JSON.stringify(policy, null, 2)); return { ok: true, policy_hash: this.policyHash() };
+    if (this.opts.button === 'deny') return { ok: false, code: 'BUTTON_TIMEOUT', detail: 'SIMULATED button not pressed' };
+    this.policy = policy; this.ownerPub = owner; this.policySeq = auth.seq;
+    fs.writeFileSync(this.policyFile, JSON.stringify(policy, null, 2)); this.save();
+    return { ok: true, policy_hash: this.policyHash(), policy_seq: this.policySeq, owner_pubkey: 'ed25519:' + bs58.encode(owner) };
   }
   async close() {}
 }

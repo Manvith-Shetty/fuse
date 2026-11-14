@@ -6,6 +6,8 @@ export const CODES = [
   'RECEIVER_NOT_ALLOWED', 'TOKEN_NOT_ALLOWED', 'AMOUNT_OVER_CAP', 'VELOCITY_CAP',
   'BUTTON_TIMEOUT', 'REFUSAL_MISMATCH', 'CHAIN_DEST_NOT_ALLOWED', 'CHAIN_VALUE_OVER_CAP',
   'BAD_POLICY', 'TX_TOO_LARGE',
+  // v2 (docs/v2-spec.md section 1)
+  'FW_MISMATCH', 'DECISION_REQUIRED', 'DECISION_INVALID', 'OWNER_SIG_INVALID', 'APPROVAL_NOT_ALLOWED',
 ] as const;
 export type CodeName = (typeof CODES)[number];
 export const codeNum = (name: CodeName) => CODES.indexOf(name);
