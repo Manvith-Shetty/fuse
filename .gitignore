@@ -16,6 +16,9 @@ build/
 # rust / near
 target/
 contracts/**/res/*.wasm
+!contracts/fuse-wallet/res/fuse_wallet.wasm
+!contracts/fuse-wallet/res/fuse_wallet_v2.wasm
+!contracts/fuse-registry/res/fuse_registry.wasm
 contracts/**/out/
 
 # platformio
@@ -35,4 +38,8 @@ attacks/report.json
 bridge/data/*
 !bridge/data/sim-policy.json
 attacks/data/
+bridge/data-sim*/
+agent/data/
+seller/data/
+firmware/.pio/
 attacks/node_modules
