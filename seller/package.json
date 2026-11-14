@@ -1,0 +1,16 @@
+{
+  "name": "@fuse/seller",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pay-per-call seller for the Fuse demo: serves an API only after verifying the agent's payment onchain (the wallet contract's pay event in the transaction the agent presents).",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
