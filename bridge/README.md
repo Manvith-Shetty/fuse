@@ -29,3 +29,20 @@ opening so the board is not held in reset.
 Scripts: `scripts/borsh-vector.mjs` prints the near-api-js transaction vector the firmware tests decode.
 `scripts/chip-smoke.ts` decodes and signs (or refuses) a real `pay` transaction on the attached chip and verifies the
 signature or refusal receipt locally; nothing is broadcast.
+
+## v2 commands (docs/v2-spec.md)
+```sh
+npm run fuse -- policy set ../firmware/policy.s3.json          # owner-signed: OWNER_ACCOUNT's legacy-keychain key signs seq+policy; BOOT confirms
+npm run fuse -- check attacker.testnet                         # shared refusal registry verdict (REGISTRY_CONTRACT in .env)
+npm run fuse -- pending && npm run fuse -- approve 3           # quorum: list / approve a pending payment (approver chip's bridge)
+npm run fuse -- enroll --role approver                         # enrol a second chip with a function-call key for approve_payment only
+npm run fuse -- audit --also-key ed25519:<previous chip key>   # data/audit/*.md and *.json, every receipt re-verified
+npm run fuse -- chain-sig address --chain btc-testnet4         # Bitcoin testnet4 address of the same wallet via Chain Signatures
+npm run fuse -- intents tokens | npm run fuse -- intents quote --from nep141:wrap.near --to <asset> --amount <atomic> --recipient <addr>   # mainnet dry quote, nothing moves
+```
+API additions on `serve`: `POST /approve {id}`, `GET /check?receiver=`, `GET /audit[?format=md]`; `/onchain` adds `pending` and
+`config`; `POST /pay` accepts `decision` (attested model decision envelope) and returns `counterparty`, `pending`, `decision`.
+Env: `REGISTRY_CONTRACT`, `FUSE_FW_ARG` (`1`/`0`, default: on for a protocol v2 chip), `SIM_DECISION_SIGNER_SEED` (simulator only).
+Bootstrap for judges: `npx tsx scripts/bootstrap.ts <prefix>` prefers `contracts/fuse-wallet/res/fuse_wallet_v2.wasm`, else the
+v1 artifact; `FUSE_ENV_OUT` and `FUSE_DATA_DIR` keep a test deployment apart from a live `.env` (then run the bridge with
+`DOTENV_CONFIG_PATH=<that file>`).
