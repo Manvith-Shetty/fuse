@@ -1,0 +1,14 @@
+{
+  "agent": "agent-s3.fuse-hack-2026.testnet",
+  "wallet": "fuse.fuse-hack-2026.testnet",
+  "methods": ["pay", "record_refusal", "request_chain_sig"],
+  "receivers": ["api.fuse-hack-2026.testnet"],
+  "tokens": ["near"],
+  "per_tx_cap": "1000000000000000000000000",
+  "button_threshold": "500000000000000000000000",
+  "chain_value_cap": "1000000000000000",
+  "chain_dests": [{ "chain": "eth-sepolia", "to": "0x000000000000000000000000000000000000dead" }],
+  "gas_cap": 300000000000000,
+  "velocity_cap": 20,
+  "velocity_window_ms": 600000
+}
