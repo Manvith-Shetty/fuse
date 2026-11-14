@@ -40,4 +40,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: if [ -f frontend/package.json ]; then cd frontend && npm ci && npm run typecheck && npm test -- --run && npm run build; fi
+      - run: cd frontend && (npm ci || npm install --no-audit --no-fund) && npm run typecheck && npm test -- --run && npm run build
