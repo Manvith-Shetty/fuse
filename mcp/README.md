@@ -80,3 +80,23 @@ Do not retry with a different receiver or split the amount to evade policy; the 
 both count and refuse that. Ask the owner to change the policy instead.
 ```
 The agent was fooled. The key was not. The evidence is onchain.
+
+## v2 tools (docs/v2-spec.md)
+| Tool | What it does |
+| --- | --- |
+| `fuse_check_counterparty` | Asks the shared refusal registry about a receiver before paying: allow / warn / block with evidence counts (distinct chips and reporters that refused it). Advisory; the chip still decides. |
+| `fuse_pending` | Lists payments above the quorum threshold that wait for a second chip. |
+| `fuse_approve` | On an approver chip's bridge: signs `approve_payment` for a pending id (button on that chip). |
+| `fuse_audit` | The verifiable spending history as Markdown or JSON: payments, refusal receipts re-verified against the chip key, chain signatures, pending, config. |
+
+`npm run build` then `claude mcp add fuse -- node <abs path>/mcp/dist/index.js` as before; `npm run smoke` still exercises
+`initialize`, `tools/list`, `fuse_status` and `fuse_policy` against a running bridge.
+
+## The product loop (2026-11-14)
+| Tool | What it does |
+| --- | --- |
+| `fuse_budget` | The agent's budget in plain words: vendors it may pay, per-call cap, the amount that needs the human's thumb, today's remaining daily budget, chip connected or not. Call before buying. |
+| `fuse_fetch` | GET a URL; on `402 Payment Required` with `{"pay":{receiver,token,amount}}` it checks the counterparty in the shared registry, lets the chip decide, and retries with `?tx=&payer=` so the vendor can verify the payment onchain. One tool = price discovery, policy, payment, delivery. |
+
+Try it against the demo seller: `node scripts/smoke.mjs --buy "http://127.0.0.1:7779/service/weather?city=Bengaluru"`
+(moves 0.001 testnet NEAR through the chip). First live run on the real ESP32-S3: tx `2HFVg7zizUBmRMKwJVkWHzEJTSUeVhRMybxJBMCAeT1m`.

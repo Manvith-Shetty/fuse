@@ -134,6 +134,107 @@ server.registerTool('fuse_log', {
   try { return json(await bridge(`/log?limit=${limit}`)); } catch (e) { return toolError(e); }
 });
 
+// ---- protocol v2 tools: counterparty check, quorum approvals, audit export ----
+server.registerTool('fuse_check_counterparty', {
+  title: 'Check a receiver against the shared refusal registry',
+  description: 'Before paying an account you have not paid before, ask the shared Fuse refusal registry about it. Other Fuse chips post signed refusal receipts there; the answer is allow, warn or block with evidence counts (distinct chips and reporters that refused payments to this account). Advisory: the chip still decides.',
+  inputSchema: { receiver: z.string().describe('NEAR account id to check') },
+}, async ({ receiver }) => {
+  try {
+    const r = await bridge(`/check?receiver=${encodeURIComponent(receiver)}`);
+    const lines = [`${receiver}: ${String(r.verdict ?? 'allow').toUpperCase()}`];
+    if (r.registry) lines.push(`registry: ${r.registry}`); else lines.push('no registry configured on this bridge (REGISTRY_CONTRACT); verdict defaults to allow');
+    if (r.reports !== undefined) lines.push(`reports: ${r.reports} (bound ${r.bound_reports ?? 0}, trusted ${r.trusted_reports ?? 0}), distinct chips: ${r.distinct_chips ?? 0}, distinct reporters: ${r.distinct_reporters ?? 0}`);
+    if (r.manual) lines.push(`curated block entry: ${r.manual}`);
+    if (r.top_codes?.length) lines.push(`top refusal codes: ${r.top_codes.map((c: any) => `${c[0]}x${c[1]}`).join(', ')}`);
+    if (r.error) lines.push(`registry error: ${r.error}`);
+    return text(lines.join('\n'));
+  } catch (e) { return toolError(e); }
+});
+
+server.registerTool('fuse_pending', {
+  title: 'Payments waiting for a second chip',
+  description: 'Payments above the wallet contract quorum threshold are stored as pending until a second Fuse chip (an approver account) approves them. Lists them.',
+  inputSchema: {},
+}, async () => {
+  try { const oc = await bridge('/onchain'); return json({ pending: oc.pending ?? [], config: oc.config ?? null }); } catch (e) { return toolError(e); }
+});
+
+server.registerTool('fuse_approve', {
+  title: 'Approve a pending payment (approver chip only)',
+  description: 'Only meaningful when this bridge\'s chip is enrolled as an approver account. Asks the chip to sign approve_payment for a pending payment id; the chip requires its own button press. The money moves only after this.',
+  inputSchema: { id: z.number().int().min(0).describe('pending payment id from fuse_pending') },
+}, async ({ id }) => {
+  try {
+    const r = await bridge('/approve', { method: 'POST', body: JSON.stringify({ id }) });
+    return r.ok ? text(`APPROVED [${r.mode}] payment #${id}${r.button ? ' (button pressed)' : ''}\ntx: ${r.hash}\nexplorer: ${r.explorer}`) : text(`NOT APPROVED [${r.mode}] payment #${id}: ${r.code ?? ''} ${r.detail ?? r.error ?? ''}`);
+  } catch (e) { return toolError(e); }
+});
+
+server.registerTool('fuse_audit', {
+  title: 'Audit export',
+  description: 'The verifiable spending history: every payment, every refusal receipt re-verified against the chip key, chain signature requests, pending approvals, contract config, firmware and policy hashes seen. JSON by default, or Markdown.',
+  inputSchema: { format: z.enum(['json', 'markdown']).default('markdown') },
+}, async ({ format }) => {
+  try {
+    if (format === 'markdown') { const res = await fetch(`${BRIDGE}/audit?format=md`); return text(await res.text()); }
+    return json(await bridge('/audit'));
+  } catch (e) { return toolError(e); }
+});
+
+// ---- the product loop: budget, and pay-per-call fetch (HTTP 402) ----
+server.registerTool('fuse_budget', {
+  title: 'What you may spend',
+  description: 'Your budget in plain terms: which vendors you may pay, the per-call cap, the amount that needs a human thumb on the chip, how much of today\'s daily budget is left, and whether the chip is connected. Call this before buying anything.',
+  inputSchema: {},
+}, async () => {
+  try {
+    const [s, oc] = await Promise.all([bridge('/status'), bridge('/onchain')]);
+    const p = s.policy ?? {}; const cp = oc.policy ?? {};
+    const spent = typeof oc.daily_spent === 'string' ? BigInt(oc.daily_spent) : 0n; const cap = cp.daily_cap ? BigInt(cp.daily_cap) : 0n;
+    const left = cap > spent ? cap - spent : 0n;
+    const lines = [
+      `chip: ${s.heartbeat?.alive ? 'connected' : 'UNPLUGGED: nothing can be paid'} (${s.mode})`,
+      `vendors you may pay: ${p.receivers?.length ? p.receivers.join(', ') : 'none'}`,
+      `tokens: ${(p.tokens ?? []).join(', ')}`,
+      `per call: up to ${yoctoToNear(p.per_tx_cap ?? '0')} NEAR; above ${yoctoToNear(p.button_threshold ?? '0')} NEAR the human must press the button on the chip within 30 s`,
+      cap ? `today: ${yoctoToNear(spent.toString())} NEAR spent of ${yoctoToNear(cap.toString())} NEAR; ${yoctoToNear(left.toString())} NEAR left` : 'daily cap: not available',
+      oc.config?.quorum_threshold && oc.config.quorum_threshold !== '0' ? `above ${yoctoToNear(oc.config.quorum_threshold)} NEAR a second chip must approve (approvers: ${(oc.config.approvers ?? []).join(', ') || 'none set'})` : '',
+      'Anything outside this is refused by the chip and the refusal is recorded onchain. Do not try to work around it.',
+    ].filter(Boolean);
+    return text(lines.join('\n'));
+  } catch (e) { return toolError(e); }
+});
+
+// A paid API answers 402 with {"pay": {"receiver","token","amount"}}; the agent pays through the chip and retries with the receipt.
+// This is the whole agent-commerce loop in one tool: discover the price, check the counterparty, let the chip decide, redeem.
+server.registerTool('fuse_fetch', {
+  title: 'Fetch a pay-per-call API, paying through the chip if asked',
+  description: 'GET a URL. If the server answers 402 Payment Required with a JSON body {"pay": {"receiver": "<near account>", "token": "near", "amount": "<yocto>"}}, this tool checks the counterparty in the shared refusal registry, proposes the payment to the Fuse chip (the chip decides, within your budget), then retries the request with ?tx=<hash>&payer=<agent account> so the seller can verify the payment onchain and serve the data. Returns the final response body. Never pays more than the 402 asks, never pays a receiver the chip policy does not allow.',
+  inputSchema: { url: z.string().url().describe('http(s) URL of the API call, e.g. http://127.0.0.1:7779/service/weather?city=Bengaluru'), max_amount: z.string().regex(/^\d+$/).optional().describe('optional ceiling in atomic units; refuse to pay above it even if the chip would allow') },
+}, async ({ url, max_amount }) => {
+  try {
+    const first = await fetch(url); const firstText = await first.text();
+    if (first.status !== 402) return text(`HTTP ${first.status} (no payment required)\n${firstText.slice(0, 4000)}`);
+    let quote: any; try { quote = JSON.parse(firstText); } catch { return text(`402 without a JSON price: ${firstText.slice(0, 500)}`); }
+    const pay = quote.pay; if (!pay?.receiver || !pay?.amount) return text(`402 but no usable "pay" field: ${firstText.slice(0, 500)}`);
+    if (max_amount && BigInt(pay.amount) > BigInt(max_amount)) return text(`NOT PAID: the API asks ${fmtAmount(pay.amount, pay.token ?? 'near')}, above your max_amount ${max_amount}.`);
+    const check = await bridge(`/check?receiver=${encodeURIComponent(pay.receiver)}`).catch(() => ({ verdict: 'allow' }));
+    if (check.verdict === 'block') return text(`NOT PAID: the shared refusal registry says BLOCK for ${pay.receiver} (${check.reports ?? 0} reports from ${check.distinct_chips ?? 0} chips). Ask the owner before paying this vendor.`);
+    const status = await bridge('/status');
+    const r = await bridge('/pay', { method: 'POST', body: JSON.stringify({ receiver: pay.receiver, token: pay.token ?? 'near', amount: String(pay.amount), memo: `fuse_fetch ${new URL(url).pathname}`.slice(0, 120) }) });
+    if (!r.ok) {
+      const why = [`REFUSED by the chip [${r.mode}]: ${r.code ?? ''} ${r.detail ?? r.error ?? ''}`.trim()];
+      if (r.refusal?.recorded) why.push(`refusal receipt #${r.refusal.counter} recorded onchain: ${r.refusal.explorer}`);
+      if (check.verdict === 'warn') why.push(`(registry had WARN for ${pay.receiver})`);
+      return text(why.join('\n'));
+    }
+    const u = new URL(url); u.searchParams.set('tx', r.hash); u.searchParams.set('payer', status.accounts?.agent ?? '');
+    const second = await fetch(u.toString()); const body = await second.text();
+    return text([`PAID ${fmtAmount(String(pay.amount), pay.token ?? 'near')} -> ${pay.receiver} [${r.mode}]${r.button ? ' (button pressed)' : ''}`, `tx: ${r.hash}  ${r.explorer}`, `counterparty: ${check.verdict ?? 'allow'}`, `seller answered HTTP ${second.status}:`, body.slice(0, 4000)].join('\n'));
+  } catch (e) { return toolError(e); }
+});
+
 server.registerResource('status', 'fuse://status', { title: 'Fuse status', description: 'Live bridge /status JSON', mimeType: 'application/json' }, async (uri) => {
   const s = await bridge('/status');
   return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(s, null, 2) }] };
