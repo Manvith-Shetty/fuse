@@ -25,7 +25,7 @@ export function startServer(port = Number(process.env.FUSE_AGENT_PORT ?? 7778)) 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     if (req.method === 'OPTIONS') return json(res, 204, {});
-    if (req.method === 'GET' && url.pathname === '/health') { const st = await bridge.status(); return json(res, 200, { ok: !st.http, busy, cooldown_ms: Math.max(0, COOLDOWN_MS - (Date.now() - lastEnd)), bridge: st.http ? 'unreachable' : st.mode, heartbeat: st.heartbeat?.alive }); }
+    if (req.method === 'GET' && url.pathname === '/health') { const st = await bridge.status().catch(() => ({ http: 503 } as Awaited<ReturnType<typeof bridge.status>>)); return json(res, 200, { ok: !st.http, busy, cooldown_ms: Math.max(0, COOLDOWN_MS - (Date.now() - lastEnd)), bridge: st.http ? 'unreachable' : st.mode, heartbeat: st.heartbeat?.alive }); }
     if (req.method === 'GET' && url.pathname === '/attempts') {
       const limit = Math.min(500, Number(url.searchParams.get('limit') ?? 50)); const all = readAttempts(5000);
       const byCode: Record<string, number> = {}; let refused = 0, paid = 0, pending = 0;

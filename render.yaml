@@ -1,0 +1,30 @@
+# Hosted, simulator-only demo of Fuse on Render's free tier: one web service runs the bridge (software chip), the
+# pay-per-call seller and the red-team agent, and serves the built frontend in front of them (deploy/demo-server.mjs).
+# The real ESP32 never runs here; every screen is labelled SIMULATED. Secrets are pasted in the Render dashboard:
+#   SIM_CHIP_STATE_JSON  the simulated chip's state file (bridge/data-sim/sim-chip-state.json), as JSON or base64
+#   NEAR_AI_API_KEY      optional; without it the red-team agent uses the labelled scripted fallback
+services:
+  - type: web
+    name: fuse-demo
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: >-
+      npm ci --prefix bridge --no-audit --no-fund &&
+      npm ci --prefix agent --no-audit --no-fund &&
+      npm ci --prefix seller --no-audit --no-fund &&
+      (npm ci --prefix frontend --no-audit --no-fund || npm install --prefix frontend --no-audit --no-fund) &&
+      npm run build --prefix frontend
+    startCommand: node deploy/demo-server.mjs
+    healthCheckPath: /api/bridge/status
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: DATA_DIR
+        value: /opt/render/project/src/bridge/data-demo
+      - key: FUSE_REDTEAM_COOLDOWN_MS
+        value: "8000"
+      - key: SIM_CHIP_STATE_JSON
+        sync: false
+      - key: NEAR_AI_API_KEY
+        sync: false

@@ -43,3 +43,6 @@ agent/data/
 seller/data/
 firmware/.pio/
 attacks/node_modules
+
+# hosted demo runtime data (seeded from env at boot)
+bridge/data-demo/
