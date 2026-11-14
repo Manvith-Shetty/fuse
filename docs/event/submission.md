@@ -40,11 +40,14 @@ Generate requestId with `uuidgen | tr A-Z a-z`. Print the payload, get an explic
 
 Mistakes after a 201: https://nearhackathon.com/request-changes (never resubmit).
 
-## Idea text draft (edit before use)
-Fuse gives an AI agent a NEAR wallet without giving it a key. The agent account holds one function-call
-key generated on an ESP32 and never exported; the protocol scopes it to one contract and three methods.
-The chip decodes every transaction's raw bytes, enforces allowlists and caps, requires a button press
-above a threshold, and signs refusal receipts that are recorded onchain. Policy is enforced three times:
-protocol, silicon, contract. Unplug the chip and the agent is revoked. Through Chain Signatures the same
-chip approves payments on other chains. NEAR provides the key model, the onchain policy and evidence,
-and the cross-chain signing.
+## Idea text draft (edit before use; 2026-11-14 positioning)
+Problem: agents now pay for API calls, data and compute, and an agent that holds a key file can be prompt-injected
+into spending all of it. Fuse gives an AI agent a budget instead of keys. The agent's NEAR account holds exactly one
+key, generated on an ESP32-S3 and never exported; the protocol scopes it to one contract and three methods. The chip
+decodes every transaction's raw bytes, enforces allowlists and caps, needs a button press above a threshold and a
+second chip above a quorum, and signs refusal receipts that the wallet contract verifies, stores and forwards to a
+shared registry other agents consult (allow / warn / block). The policy is owner-signed and enforced three times:
+protocol, silicon, contract. Unplug the chip and the agent is revoked. Claude Code uses it through MCP; a seller
+serves pay-per-call APIs after reading the payment from the chain; through Chain Signatures the same chip approves
+payments on other chains. NEAR provides the key model, the onchain policy and evidence, and the cross-chain signing.
+Everything in the README is labelled real chip, simulator or unverified.
