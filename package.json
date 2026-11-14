@@ -5,6 +5,10 @@
   "description": "Fuse: a hardware key for AI agents on NEAR (workspace root)",
   "scripts": {
     "attacks": "cd bridge && npm i --silent && ln -sfn ../bridge/node_modules ../attacks/node_modules && npx tsx ../attacks/src/run.ts",
-    "attacks:dry": "cd bridge && ln -sfn ../bridge/node_modules ../attacks/node_modules && npx tsx ../attacks/src/run.ts --no-broadcast"
+    "attacks:dry": "cd bridge && ln -sfn ../bridge/node_modules ../attacks/node_modules && npx tsx ../attacks/src/run.ts --no-broadcast",
+    "story": "cd bridge && npm run story --silent",
+    "test:all": "cd bridge && npx vitest run && cd ../frontend && npx vitest run && cd ../contracts/fuse-wallet && cargo test && cd ../fuse-registry && cargo test && cd ../../firmware && pio test -e native",
+    "preflight": "node scripts/preflight.mjs",
+    "preflight:full": "node scripts/preflight.mjs --full"
   }
 }

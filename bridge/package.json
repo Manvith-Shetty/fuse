@@ -12,7 +12,8 @@
     "dev": "tsx src/cli.ts",
     "fuse": "tsx src/cli.ts",
     "test": "vitest run",
-    "vector": "node scripts/borsh-vector.mjs"
+    "vector": "node scripts/borsh-vector.mjs",
+    "story": "tsx scripts/story.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
